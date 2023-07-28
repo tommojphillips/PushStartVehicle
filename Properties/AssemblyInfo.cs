@@ -1,36 +1,52 @@
-﻿using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
+﻿// VERSION 1.3
+using System.Reflection;
+using System.Resources;
 
-// General Information about an assembly is controlled through the following
-// set of attributes. Change these attribute values to modify the information
-// associated with an assembly.
+// General Information
 [assembly: AssemblyTitle("PushStartVehicle")]
-[assembly: AssemblyDescription("My Summer Car Mod file")]
+[assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("Tommo J. Productions")]
 [assembly: AssemblyProduct("PushStartVehicle")]
-[assembly: AssemblyCopyright("Copyright © 2023 by ")]
-[assembly: AssemblyTrademark("")]
-[assembly: AssemblyCulture("")]
+[assembly: AssemblyCopyright("Tommo J. Productions Copyright © 2023")]
+[assembly: NeutralResourcesLanguage("en-AU")]
 
-// Setting ComVisible to false makes the types in this assembly not visible
-// to COM components.  If you need to access a type in this assembly from
-// COM, set the ComVisible attribute to true on that type.
-[assembly: ComVisible(false)]
+// Version information
+[assembly: AssemblyVersion("0.1.0.82")]
+[assembly: AssemblyFileVersion("0.1.0.82")]
 
-// The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("46c65f50-3e4c-44c7-ba99-9998a41988ac")]
+namespace TommoJProductions.PushStartVehicle
+{
+    
+    /// <summary>
+    /// Represents the version info for PushStartVehicle
+    /// </summary>
+    public class VersionInfo
+    {
+        /// <summary>
+        /// Represents latest release version date. Format: dd:MM:yyyy hh:mm tt
+        /// </summary>
+	    public const string lastestRelease = "28.07.2023 06:52 PM";
+        /// <summary>
+        /// Represents current version.
+        /// </summary>
+	    public const string version = "0.1.0.82";
 
-// Version information for an assembly consists of the following four values:
-//
-//      Major Version
-//      Minor Version
-//      Build Number
-//      Revision
-//
-// You can specify all the values or you can default the Build and Revision Numbers
-// by using the '*' as shown below:
-// [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+        /// <summary>
+        /// Represents if the mod has been complied for x64
+        /// </summary>
+        #if x64
+            internal const bool IS_64_BIT = true;
+        #else
+            internal const bool IS_64_BIT = false;
+        #endif
+        /// <summary>
+        /// Represents if the mod has been complied in Debug mode
+        /// </summary>
+        #if DEBUG
+            internal const bool IS_DEBUG_CONFIG = true;
+        #else
+            internal const bool IS_DEBUG_CONFIG = false;
+        #endif
+    }
+}

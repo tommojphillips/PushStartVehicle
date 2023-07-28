@@ -24,28 +24,29 @@ namespace TommoJProductions.PushStartVehicle
         private GameObject engine;
         private PlayMakerFSM starterFsm;
 
-        private float wheelRotationalInertia;
-        private float wheelAngularVelocity;
-        private float wheelImpulse;
-        private float wheelSpeed;
-        private float clutchSpeed;
-        private float unburnedFuel;
+        private float _wheelRotationalInertia;
+        private float _wheelAngularVelocity;
+        private float _wheelImpulse;
+        private float _wheelSpeed;
+        private float _clutchSpeed;
+        private float _unburnedFuel;
 
         internal float engineSpeed;
+
         public float clutchDragImplulse;
             
-        /// <summary>
-        /// if true, enables gear reset to netural when engine starts.
-        /// </summary>
-        private bool starterHelpActive = false;
-        private bool keyBanging;
+        private bool _keyBanging;
 
         internal bool pushStarting;
 
+        /// <summary>
+        /// if true, enables gear reset to netural when engine starts.
+        /// </summary>
+        public bool starterHelpActive = false;
         public bool engineWillStart = true;
         public bool pushStartLogicEnabled = true;
 
-        private GameObject electrics;
+        private GameObject _electrics;
         private PlayMakerFSM electricsFsm;
         private FsmBool electricsOk;
         private FsmBool batteryInstalled;
@@ -59,6 +60,7 @@ namespace TommoJProductions.PushStartVehicle
         private FsmState starterStallEngineState;
         private FsmBool shutOff;
         private PlayMakerFSM backfire;
+        public float engineFrictionFactor;
 
         private bool engineOn => engine.activeInHierarchy;
         private bool starterMotorHasPower => batteryInstalledAndBolted;
@@ -66,7 +68,7 @@ namespace TommoJProductions.PushStartVehicle
 
         #region Unity Runtime
 
-        void Start()
+        void oldStart() 
         {
             // Written, 13.11.2022
 
@@ -80,8 +82,8 @@ namespace TommoJProductions.PushStartVehicle
             Transform starter = satsuma.carSimulation.transform.Find("Car/Starter");
             starterFsm = starter.GetPlayMaker("Starter");
 
-            electrics = satsuma.carSimulation.transform.Find("Car/Electrics").gameObject;
-            electricsFsm = electrics.GetPlayMaker("Electrics");
+            _electrics = satsuma.carSimulation.transform.Find("Car/Electrics").gameObject;
+            electricsFsm = _electrics.GetPlayMaker("Electrics");
             electricsOk = electricsFsm.FsmVariables.FindFsmBool("ElectricsOK");
 
             FsmState startHelpState = starter.GetPlayMaker("StartHelp").GetState("State 1");
@@ -126,6 +128,7 @@ namespace TommoJProductions.PushStartVehicle
 
             FsmState starterWaitState = starterFsm.GetState("Wait");
 
+            FsmState starterStartEngineState = starterFsm.GetState("Start engine");
             starterStallEngineState = starterFsm.GetState("Stall engine");
             shutOff = starterFsm.FsmVariables.FindFsmBool("ShutOff");
 
@@ -161,7 +164,7 @@ namespace TommoJProductions.PushStartVehicle
             accFsm.replaceAction(starterMotorCheck, 1);
 
             // fuel gauge battery check
-            fuelGaugeTestState.replaceAction(fuelGaugeBatteryCheck, 1); 
+            fuelGaugeTestState.replaceAction(fuelGaugeBatteryCheck, 1);
 
             starterWaitState.RemoveAction(5); // sets drivetrain.rpm to 0.
 
@@ -172,10 +175,67 @@ namespace TommoJProductions.PushStartVehicle
             // Remove engineFrictionFactor assignment to 3.
             starterStallEngineState.RemoveAction(6);
 
+            // Remove drivetrain.canStall assignment to false.
+            starterStartEngineState.RemoveAction(5);
+        }
+        void Start()
+        {
+            // Written, 10.07.2023
+            
+            Satsuma satsuma = Database.databaseVehicles.satsuma;
+
+            engine = satsuma.engine;
+            drivetrain = satsuma.drivetrain;
+            carDynamics = satsuma.carDynamics;
+            carController = satsuma.carDynamics.carController;
+
+            backfire = engine.transform.Find("Symptoms").GetComponent<PlayMakerFSM>();
+            
+            GameObject ignitionGo = satsuma.gameObject.transform.Find("Dashboard/Steering/steering_column2/IgnitionSatsuma").gameObject;
+            PlayMakerFSM ignitionUse = ignitionGo.GetComponent<PlayMakerFSM>();
+            acc = ignitionUse.FsmVariables.FindFsmBool("ACC");
+
+            Transform starter = satsuma.carSimulation.transform.Find("Car/Starter");
+            starterFsm = starter.GetPlayMaker("Starter");
+            shutOff = starterFsm.FsmVariables.FindFsmBool("ShutOff");
+
+            starterStallEngineState = starterFsm.GetState("Stall engine");
+            FsmState starterWait = starterFsm.GetState("Wait");
+            FsmState starterStart = starterFsm.GetState("Start");
+            FsmState starterStartEngine = starterFsm.GetState("Start engine");
+            FsmState starterWaitForStart = starterFsm.GetState("Wait for start");
+            FsmState starterResetDrivetrain = starterFsm.GetState("Reset drivetrain");
+            
+            // start help
+            FsmState startHelpState = starter.GetPlayMaker("StartHelp").GetState("State 1");
+            startHelpState.replaceAction(starterHelp, 0, CallbackTypeEnum.onUpdate, true);
+            startHelpState.RemoveAction(1);
+
+            injectCheckIfKeyAccTurnedOnWhenEngineStalling();
+
+            // Remove drivetrain.engineFrictionFactor assignment
+            //starterWaitForStart.replaceAction(setEngineFriction, 2);
+            //starterStart.replaceAction(setEngineFriction, 3);
+
+            // Remove drivetrain.enable assignment
+            FsmTransition t = starterWait.Transitions[0];
+            t.ToState = "Wait for start";
+            starterWait.Transitions[0] = t;
+
+            // Remove drivetrain.canStall assignment to false.
+            starterStartEngine.RemoveAction(5);
+            starterStartEngine.replaceAction(startEngine, 11);
+
+            //starterStallEngineState.RemoveAction(5);
+            //starterStallEngineState.RemoveAction(4);
+            //starterStallEngineState.RemoveAction(0);
+
+
+
             modifyFrictionMaterials();
 
-            SimulationDebug sd = gameObject.AddComponent<SimulationDebug>();
-            sd.logic = this;
+            LogicDebug ld = gameObject.AddComponent<LogicDebug>();
+            ld.logic = this;
         }
 
 
@@ -185,18 +245,18 @@ namespace TommoJProductions.PushStartVehicle
 
             if (pushStartLogicEnabled)
             {
-                wheelRotationalInertia = 0;
-                wheelAngularVelocity = 0;
-                wheelImpulse = 0;
+                _wheelRotationalInertia = 0;
+                _wheelAngularVelocity = 0;
+                _wheelImpulse = 0;
                 for (int i = 0; i < drivetrain.poweredWheels.Length; i++)
                 {
-                    wheelRotationalInertia += drivetrain.poweredWheels[i].rotationalInertia;
-                    wheelAngularVelocity += drivetrain.poweredWheels[i].angularVelocity;
-                    wheelImpulse += drivetrain.poweredWheels[i].wheelImpulse;
+                    _wheelRotationalInertia += drivetrain.poweredWheels[i].rotationalInertia;
+                    _wheelAngularVelocity += drivetrain.poweredWheels[i].angularVelocity;
+                    _wheelImpulse += drivetrain.poweredWheels[i].wheelImpulse;
                 }
-                wheelSpeed = wheelAngularVelocity * drivetrain.angularVelo2RPM;
-                clutchSpeed = wheelSpeed * drivetrain.ratio;
-                clutchDragImplulse = getClutchDragImpluse(engineSpeed);
+                _wheelSpeed = _wheelAngularVelocity * drivetrain.angularVelo2RPM;
+                _clutchSpeed = _wheelSpeed * drivetrain.ratio;
+                clutchDragImplulse = getClutchDragImpulse(engineSpeed);
 
                 if (!engineOn)
                 {
@@ -209,7 +269,7 @@ namespace TommoJProductions.PushStartVehicle
                     {
                         if (carController.clutchInput < 0.5f)
                         {
-                            engineSpeed = Mathf.Clamp(engineSpeed += clutchSpeed * Time.deltaTime, -clutchSpeed, clutchSpeed);
+                            engineSpeed = Mathf.Clamp(engineSpeed += _clutchSpeed * Time.deltaTime, -_clutchSpeed, _clutchSpeed);
 
                             if (engineSpeed > drivetrain.minRPM)
                             {
@@ -235,28 +295,32 @@ namespace TommoJProductions.PushStartVehicle
 
         private void modifyFrictionMaterials()
         {
-            /*MyPhysicMaterial[] pm = carDynamics.physicMaterials;
+            MyPhysicMaterial[] pm = carDynamics.physicMaterials;
 
             for (int i = 0; i < pm.Length; i++)
             {
                 carDynamics.physicMaterials[i].physicMaterial.frictionCombine = PhysicMaterialCombine.Multiply;
                 carDynamics.physicMaterials[i].physicMaterial.bounceCombine = PhysicMaterialCombine.Maximum;
             }
-            carDynamics.physicMaterials[0].grip = 1.2f; // track
+
+            /*carDynamics.physicMaterials[0].grip = 1.2f; // track
             carDynamics.physicMaterials[1].grip = 0.91f; // offroad
             carDynamics.physicMaterials[2].grip = 0.81f; // grass*/
         }
 
-        private float getClutchDragImpluse(float engineRpm) 
+        internal float getClutchDragImpulse(float engineRpm = -1) 
         {
+            if (engineRpm < 0)
+                engineRpm = drivetrain.rpm;
+
             return drivetrain.clutch.GetDragImpulse(
                 engineRpm * drivetrain.RPM2angularVelo,
-                wheelAngularVelocity * drivetrain.ratio,
+                _wheelAngularVelocity * drivetrain.ratio,
                 drivetrain.engineInertia * drivetrain.powerMultiplier * drivetrain.externalMultiplier,
-                drivetrain.drivetrainInertia * drivetrain.powerMultiplier * drivetrain.externalMultiplier + wheelRotationalInertia,
+                drivetrain.drivetrainInertia * drivetrain.powerMultiplier * drivetrain.externalMultiplier + _wheelRotationalInertia,
                 drivetrain.ratio,
-                wheelImpulse,
-                (drivetrain.torque - drivetrain.frictionTorque + drivetrain.startTorque) * Time.deltaTime);
+                _wheelImpulse,
+                (drivetrain.torque - drivetrain.frictionTorque + drivetrain.startTorque) * Time.deltaTime);           
         }
 
         private void injectCheckIfKeyAccTurnedOnWhenEngineStalling()
@@ -265,12 +329,9 @@ namespace TommoJProductions.PushStartVehicle
 
             starterStallEngineState.addNewTransitionToState(starterFsm.FsmEvents[10].Name, "Running");
 
-            /*List<FsmTransition> transitions = starterStallEngineState.Transitions.ToList();
-            transitions.Add(new FsmTransition() { FsmEvent = starterFsm.FsmEvents[10], ToState = "Running" });
-            starterStallEngineState.Transitions = transitions.ToArray();*/
-
             starterStallEngineState.insertNewAction(checkIfAccTurnedOnWhenEngineStalling, 7, CallbackTypeEnum.onUpdate, true);
         }
+        
         private void exhaustCrackle()
         {
             backfire.SendEvent("TIMINGBACKFIRE");
@@ -279,11 +340,21 @@ namespace TommoJProductions.PushStartVehicle
         #endregion
 
         #region Playmaker Injects
+        
+        private void setEngineFriction() 
+        {
+            drivetrain.engineFrictionFactor = engineFrictionFactor;
+        }
+        private void startEngine() 
+        {
+            starterFsm.SendEvent("Finished");
+        }
+
 
         private void pushStartEngine()
         {
             starterFsm.SendEvent("PUSHSTART");
-            electrics.SetActive(true);
+            _electrics.SetActive(true);
         }
         private void starterHelp()
         {
@@ -325,7 +396,7 @@ namespace TommoJProductions.PushStartVehicle
             {
                 if (batteryInstalledAndBolted && batteryCharge.Value > 80)
                 {
-                    electrics.SetActive(true);
+                    _electrics.SetActive(true);
                 }
                 electricsOk.Value = true;
             }
@@ -356,27 +427,28 @@ namespace TommoJProductions.PushStartVehicle
                     shutOff.Value = false;
                     starterFsm.SendEvent("RUN");
 
-                    if (keyBanging && unburnedFuel > 10)
+                    if (_keyBanging && _unburnedFuel > 10)
                     {
                         exhaustCrackle();
                     }
+                    return true;
                 }
                 else
                 {
-                    if (!keyBanging)
+                    if (!_keyBanging)
                     {
-                        keyBanging = true;
+                        _keyBanging = true;
                     }
                     else
                     {
-                        unburnedFuel += (drivetrain.idlethrottle + drivetrain.throttle) * 10;
+                        _unburnedFuel += (drivetrain.idlethrottle + drivetrain.throttle) * 10;
                     }
                 }
             }
             else
             {
-                keyBanging = false;
-                unburnedFuel = 0;
+                _keyBanging = false;
+                _unburnedFuel = 0;
                 return true;
             }
 
